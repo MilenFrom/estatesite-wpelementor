@@ -3,7 +3,7 @@
  * Plugin Name: EstateSite Elementor
  * Plugin URI:  https://estatesite.eu
  * Description: Elementor widgets, dynamic tags, theme builder integration, and templates library for EstateSite.
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Estate Site
  * Author URI:  https://estatesite.eu
  * Text Domain: estatesite-wpelementor
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'ESELE_VERSION',  '1.0.0' );
+define( 'ESELE_VERSION',  '1.0.1' );
 define( 'ESELE_FILE',     __FILE__ );
 define( 'ESELE_DIR',      plugin_dir_path( __FILE__ ) );
 define( 'ESELE_URL',      plugin_dir_url( __FILE__ ) );
@@ -46,11 +46,21 @@ defined( 'HOUZEZ_PLUGIN_CORE_VERSION' ) || define( 'HOUZEZ_PLUGIN_CORE_VERSION',
 // Activation hook: populate wp-content/uploads/estatesite-wpelementor/ from
 // the bundled source-assets/ dir so template-inserted SVGs/PNGs survive
 // future plugin updates (uploads/ is preserved, plugin dir is wiped+replaced).
+//
+// Wrapped in try/catch because any uncaught throwable here causes WordPress
+// to abort the activation request and redirect the admin to the generic
+// "The link you followed has expired" page (WP swallows the real error).
+// The populate step is a nice-to-have, not a hard requirement — admin_init
+// retries it on every subsequent admin pageload via maybe_populate_uploads().
 register_activation_hook( __FILE__, function () {
-	require_once __DIR__ . '/includes/class-templates.php';
-	\EstateSite\Elementor\Templates::populate_uploads_dir( false );
-	// Mark as populated so the admin_init lazy-populate doesn't re-check.
-	update_option( 'estatesite_templates_uploads_populated', time(), false );
+	try {
+		require_once __DIR__ . '/includes/class-templates.php';
+		\EstateSite\Elementor\Templates::populate_uploads_dir( false );
+		update_option( 'estatesite_templates_uploads_populated', time(), false );
+	} catch ( \Throwable $e ) {
+		error_log( '[estatesite-wpelementor] activation populate failed: ' . $e->getMessage() );
+		// Don't rethrow — admin_init will retry the populate step on next load.
+	}
 } );
 
 // PSR-4 autoloader.
@@ -136,5 +146,26 @@ add_action( 'plugins_loaded', function () {
 		return;
 	}
 
-	\EstateSite\Elementor\Plugin::instance();
+	// Wrap the bootstrap in try/catch. Any uncaught throwable here during the
+	// post-activation re-load surfaces to the admin as "The link you followed
+	// has expired" because WP can't redirect cleanly. Catching and logging
+	// keeps activation atomic — the plugin will still mark itself active, and
+	// the failure will be visible in debug.log for triage instead of an opaque
+	// admin error page.
+	try {
+		\EstateSite\Elementor\Plugin::instance();
+	} catch ( \Throwable $e ) {
+		error_log( '[estatesite-wpelementor] bootstrap failed: ' . $e->getMessage() . ' at ' . $e->getFile() . ':' . $e->getLine() );
+		add_action( 'admin_notices', function () use ( $e ) {
+			if ( ! current_user_can( 'manage_options' ) ) {
+				return;
+			}
+			printf(
+				'<div class="notice notice-error"><p><strong>%s</strong> %s</p><p><code>%s</code></p></div>',
+				esc_html__( 'EstateSite Elementor bootstrap failed.', 'estatesite-wpelementor' ),
+				esc_html__( 'The plugin is active but did not initialize. Check the error below and the PHP error log.', 'estatesite-wpelementor' ),
+				esc_html( $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' )
+			);
+		} );
+	}
 }, 10 );
