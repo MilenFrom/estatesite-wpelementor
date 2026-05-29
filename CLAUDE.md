@@ -10,7 +10,7 @@ Phase 0 scaffold. Bootstrap + dependency checks + custom widget category. No wid
 - **Class prefix**: `ESEle_`
 - **Constants**: `ESELE_VERSION`, `ESELE_FILE`, `ESELE_DIR`, `ESELE_URL`, `ESELE_BASENAME`
 - **Hard dependencies**: EstateSite Core plugin + Elementor (free is enough)
-- **Update pipeline**: TBD (same as Core — not GitHub-token pattern)
+- **Update pipeline**: native WP filter reads manifest JSON from `https://dev.estatesite.eu/updates/estatesite-wpelementor.json`, downloads zip from same server. Uses the `\EstateSite\Core\Update_Checker` class from Core (hard dependency). See [/plugins-release-docs.md](../../../plugins-release-docs.md) at the dev site root.
 
 ## Files of note
 

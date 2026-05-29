@@ -630,8 +630,55 @@ final class Templates {
 	// Path helpers
 	// ---------------------------------------------------------------------
 
+	/**
+	 * Templates live in ONE of two locations, checked in priority order:
+	 *
+	 *   1. wp-content/uploads/estatesite-wpelementor/templates/  ← customer post-fetch
+	 *      Created when admin clicks "Fetch templates" (see Template_Fetcher).
+	 *      Survives plugin updates.
+	 *
+	 *   2. wp-content/plugins/estatesite-wpelementor/templates/  ← bundled (legacy / dev)
+	 *      Only exists on the dev tree and pre-1.0.2 zips. Production zips
+	 *      from 1.0.2 onwards omit templates/ to keep the plugin upload
+	 *      under typical PHP upload_max_filesize.
+	 *
+	 * Cached per-request so the existence checks don't re-stat on every call.
+	 */
+	private static $base_dir_cache = null;
+	private static $base_url_cache = null;
+
 	public static function base_dir(): string {
-		return ESELE_DIR . 'templates';
+		if ( self::$base_dir_cache !== null ) {
+			return self::$base_dir_cache;
+		}
+		$uploads = wp_upload_dir();
+		$candidate = trailingslashit( $uploads['basedir'] ?? WP_CONTENT_DIR . '/uploads' ) . 'estatesite-wpelementor/templates';
+		if ( is_dir( $candidate ) && file_exists( $candidate . '/manifest.json' ) ) {
+			return self::$base_dir_cache = $candidate;
+		}
+		// Fall back to bundled location (dev tree / pre-1.0.2 installs).
+		return self::$base_dir_cache = ESELE_DIR . 'templates';
+	}
+
+	private static function base_url(): string {
+		if ( self::$base_url_cache !== null ) {
+			return self::$base_url_cache;
+		}
+		$uploads = wp_upload_dir();
+		$uploads_path = trailingslashit( $uploads['basedir'] ?? WP_CONTENT_DIR . '/uploads' ) . 'estatesite-wpelementor/templates';
+		if ( is_dir( $uploads_path ) && file_exists( $uploads_path . '/manifest.json' ) ) {
+			return self::$base_url_cache = trailingslashit( $uploads['baseurl'] ?? content_url( 'uploads' ) ) . 'estatesite-wpelementor/templates';
+		}
+		return self::$base_url_cache = rtrim( ESELE_URL, '/' ) . '/templates';
+	}
+
+	/**
+	 * Reset the cached base paths. Called by Template_Fetcher after a fetch
+	 * lands new templates in uploads/, so the next read picks the new location.
+	 */
+	public static function reset_base_cache(): void {
+		self::$base_dir_cache = null;
+		self::$base_url_cache = null;
 	}
 
 	public static function content_dir(): string {
@@ -639,7 +686,16 @@ final class Templates {
 	}
 
 	public static function images_base_url(): string {
-		return ESELE_URL . 'templates/images/';
+		return self::base_url() . '/images/';
+	}
+
+	/**
+	 * Is the template library actually present? Used by the admin page +
+	 * by callers that need to gracefully degrade (e.g. hide the library
+	 * modal when templates aren't fetched yet).
+	 */
+	public static function library_present(): bool {
+		return file_exists( self::base_dir() . '/manifest.json' );
 	}
 
 	/**

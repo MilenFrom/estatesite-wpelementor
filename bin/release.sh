@@ -100,6 +100,18 @@ mkdir -p "$DIST_DIR"
 
 # Copy everything that ships to customers. Excludes dev artifacts so the
 # zip mirrors what WordPress puts on the customer server post-install.
+#
+# CRITICAL: templates/ is EXCLUDED. The bundled Houzez template library
+# weighs ~170 MB raw / ~137 MB compressed — far above the typical PHP
+# `upload_max_filesize` of 2-8 MB on customer hosts. Including it in the
+# zip caused the customer's Plugins → Add New → Upload to silently
+# truncate the POST body, fail the nonce check, and surface as the
+# generic "The link you followed has expired" error.
+#
+# Templates ship as a SEPARATE tarball that the admin fetches on demand
+# via "EstateSite Elementor → Templates → Fetch templates" once the
+# plugin itself is active. Tarball is built and uploaded by this script
+# below.
 rsync -a \
   --exclude='.git' \
   --exclude='.github' \
@@ -116,6 +128,7 @@ rsync -a \
   --exclude='.DS_Store' \
   --exclude='Thumbs.db' \
   --exclude='RELEASE_NOTES_v*.md' \
+  --exclude='templates' \
   ./ "$DIST_DIR/"
 
 # Build zip inside the temp dir so the top-level entry is $PACKAGE_SLUG/
@@ -123,6 +136,28 @@ rsync -a \
 
 ZIP_SIZE=$(du -h "$WORK_DIR/$ZIP_NAME" | cut -f1)
 echo "✓ Built zip: $ZIP_NAME ($ZIP_SIZE)"
+
+# -----------------------------------------------------------------------------
+# Build templates tarball (separate from the plugin zip)
+# -----------------------------------------------------------------------------
+# Versionless filename — same templates apply across plugin versions until
+# we add or change templates. When that happens, bump the FETCH_VERSION
+# constant referenced by class-template-fetcher.php and ship a new tarball.
+TEMPLATES_TARBALL="$PACKAGE_SLUG-templates.tar.gz"
+TEMPLATES_SHA256_FILE="$PACKAGE_SLUG-templates.sha256"
+
+if [ -d "templates" ]; then
+  echo "==> Building templates tarball"
+  # `-C .` so the tar entries start with templates/, matching what extract expects
+  tar czf "$WORK_DIR/$TEMPLATES_TARBALL" templates
+  TARBALL_SIZE=$(du -h "$WORK_DIR/$TEMPLATES_TARBALL" | cut -f1)
+  sha256sum "$WORK_DIR/$TEMPLATES_TARBALL" | awk '{print $1}' > "$WORK_DIR/$TEMPLATES_SHA256_FILE"
+  TARBALL_SHA=$(cat "$WORK_DIR/$TEMPLATES_SHA256_FILE")
+  echo "✓ Built templates tarball: $TEMPLATES_TARBALL ($TARBALL_SIZE, sha256=${TARBALL_SHA:0:12}…)"
+else
+  echo "⚠ No templates/ dir found — skipping tarball build"
+  TEMPLATES_TARBALL=""
+fi
 
 # -----------------------------------------------------------------------------
 # Build manifest JSON
@@ -162,6 +197,27 @@ fi
 
 cp "$WORK_DIR/$ZIP_NAME" "$UPDATE_ENDPOINT_DIR/$ZIP_NAME"
 cp "$MANIFEST"          "$UPDATE_ENDPOINT_DIR/$PACKAGE_SLUG.json"
+
+# Deploy the templates tarball (versionless filename) + manifest
+if [ -n "$TEMPLATES_TARBALL" ] && [ -f "$WORK_DIR/$TEMPLATES_TARBALL" ]; then
+  cp "$WORK_DIR/$TEMPLATES_TARBALL"     "$UPDATE_ENDPOINT_DIR/$TEMPLATES_TARBALL"
+  cp "$WORK_DIR/$TEMPLATES_SHA256_FILE" "$UPDATE_ENDPOINT_DIR/$TEMPLATES_SHA256_FILE"
+
+  # Templates manifest — admin button reads this to know what to fetch.
+  TARBALL_BYTES=$(stat -c%s "$WORK_DIR/$TEMPLATES_TARBALL")
+  TARBALL_SHA=$(cat "$WORK_DIR/$TEMPLATES_SHA256_FILE")
+  cat > "$UPDATE_ENDPOINT_DIR/$PACKAGE_SLUG-templates.json" <<JSON
+{
+  "name":         "EstateSite Elementor Templates",
+  "version":      "$VERSION",
+  "download_url": "$UPDATE_ENDPOINT_URL/$TEMPLATES_TARBALL",
+  "size_bytes":   $TARBALL_BYTES,
+  "sha256":       "$TARBALL_SHA",
+  "last_updated": "$LAST_UPDATED"
+}
+JSON
+  echo "✓ Deployed templates manifest + tarball"
+fi
 
 echo ""
 echo "✓ Released $PACKAGE_SLUG v$VERSION"

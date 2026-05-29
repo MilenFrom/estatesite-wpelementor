@@ -86,7 +86,62 @@ final class Plugin {
 		// has no admin entry point at all.
 		add_action( 'admin_menu', [ $this, 'register_theme_builder_submenu' ], 20 );
 
+		// Admin: "EE Templates" page with the Fetch button. Templates aren't
+		// shipped in the plugin zip (~140 MB would exceed PHP's typical
+		// upload_max_filesize) — the customer fetches them post-install from
+		// our update server.
+		if ( is_admin() ) {
+			new \EstateSite\Elementor\Admin\Templates_Page();
+		}
+
+		// Editor-only: when a single-* widget's preview-post swap fails
+		// because the user hasn't picked a preview post (and no published
+		// post of that type exists to fall back to), replace the otherwise
+		// empty/broken render with an actionable hint pointing them at
+		// Preview Settings.
+		add_filter( 'elementor/widget/render_content', [ $this, 'render_preview_hint_if_needed' ], 99, 2 );
+
 		do_action( 'estatesite_elementor_loaded', $this );
+	}
+
+	/**
+	 * Wrap or replace a widget's rendered content with a "pick a preview
+	 * post" hint when the trait flagged a swap failure for this render.
+	 * Only runs in the Elementor editor / WP preview — frontend renders
+	 * are untouched.
+	 *
+	 * @param string                  $content Rendered widget HTML.
+	 * @param \Elementor\Widget_Base  $widget  The widget being rendered.
+	 * @return string
+	 */
+	public function render_preview_hint_if_needed( $content, $widget ): string {
+		$failed_for = Preview_Signal::consume();
+		if ( $failed_for === '' ) {
+			return $content;
+		}
+
+		$labels = [
+			'property'      => __( 'a property', 'estatesite-wpelementor' ),
+			'houzez_agent'  => __( 'an agent', 'estatesite-wpelementor' ),
+			'houzez_agency' => __( 'an agency', 'estatesite-wpelementor' ),
+			'post'          => __( 'a post', 'estatesite-wpelementor' ),
+		];
+		$label = $labels[ $failed_for ] ?? $failed_for;
+
+		$hint = sprintf(
+			'<div class="esc-preview-hint" style="border:1px dashed #b04632;background:#fff5f3;color:#621a14;padding:14px 18px;border-radius:4px;font-family:sans-serif;font-size:13px;line-height:1.5;margin:8px 0;">'
+			. '<strong style="display:block;margin-bottom:4px;">%1$s</strong>'
+			. '%2$s'
+			. '</div>',
+			esc_html__( 'No preview data available', 'estatesite-wpelementor' ),
+			sprintf(
+				/* translators: %s: human label for the post type, e.g. "a property". */
+				esc_html__( 'Open the document settings panel (gear icon, bottom-left) and pick %s under "Preview Settings". Without one, this widget has nothing to render.', 'estatesite-wpelementor' ),
+				esc_html( $label )
+			)
+		);
+
+		return $hint . $content;
 	}
 
 	/**

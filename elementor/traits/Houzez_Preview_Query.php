@@ -17,6 +17,20 @@ if ( ! defined( 'ABSPATH' ) ) {
 trait Houzez_Preview_Query {
 
     /**
+     * Tracks why fts_apply_preview_swap() did or didn't swap $post for the
+     * current widget render. Per-instance and unused outside this trait.
+     *
+     * Values:
+     *   ''                  → swap performed (or trait never invoked)
+     *   'not_editor'        → not in editor/preview context, real frontend render
+     *   'no_target_picked'  → editor context, no published post of that type exists
+     *                         AND user hasn't picked a preview post for that type
+     *
+     * @var string
+     */
+    private $fts_preview_swap_status = '';
+
+    /**
      * Decide which post to use as the preview target for the given type.
      *
      * Order of preference:
@@ -129,16 +143,51 @@ trait Houzez_Preview_Query {
      * below (single_property_preview_query, single_agent_preview_query, etc).
      */
     private function fts_apply_preview_swap( $post_type ) {
+        $this->fts_preview_swap_status = '';
+        \EstateSite\Elementor\Preview_Signal::clear();
+
         if ( ! $this->fts_should_run_preview_swap() ) {
+            $this->fts_preview_swap_status = 'not_editor';
             return;
         }
         $target_id = $this->fts_resolve_preview_target( $post_type );
         if ( ! $target_id ) {
+            $this->fts_preview_swap_status = 'no_target_picked';
+            \EstateSite\Elementor\Preview_Signal::set_failure( (string) $post_type );
+
+            // Seed $post with a benign empty WP_Post so widgets that do
+            // `$post->ID` / `get_post_thumbnail_id( $post->ID )` etc. don't
+            // generate "Attempt to read property on null" warnings under
+            // PHP 8.x. The render still has no real data — fix (c)'s hint
+            // is what the user actually sees on top.
+            $GLOBALS['post'] = self::fts_empty_post_stub( $post_type );
             return;
         }
         $GLOBALS['post'] = get_post( $target_id );
         setup_postdata( $GLOBALS['post'] );
     }
+
+    /**
+     * A fully-zeroed WP_Post object used as a placeholder when no preview
+     * target is available. Widget code that reads `$post->ID` sees 0; meta
+     * lookups on 0 return null (Core's accessor short-circuits on falsy IDs);
+     * Property::get(0, ...) returns the default. No DB queries, no warnings.
+     */
+    private static function fts_empty_post_stub( $post_type ) {
+        $stub               = new \WP_Post( (object) [] );
+        $stub->ID           = 0;
+        $stub->post_type    = (string) $post_type;
+        $stub->post_status  = 'draft';
+        $stub->post_title   = '';
+        $stub->post_content = '';
+        $stub->post_excerpt = '';
+        $stub->post_author  = 0;
+        $stub->post_date    = '0000-00-00 00:00:00';
+        $stub->post_date_gmt = '0000-00-00 00:00:00';
+        $stub->filter       = 'raw';
+        return $stub;
+    }
+
 
     public function single_preview_query() {
         // Determine the right post type from the template_type meta. The
