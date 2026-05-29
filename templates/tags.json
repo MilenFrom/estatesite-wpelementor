@@ -1,0 +1,97 @@
+[
+  {
+    "title": "About us",
+    "slug": "about-us",
+    "count": 44
+  },
+  {
+    "title": "Agents",
+    "slug": "agents",
+    "count": 13
+  },
+  {
+    "title": "Blog",
+    "slug": "blog",
+    "count": 7
+  },
+  {
+    "title": "Calculator",
+    "slug": "calculator",
+    "count": 0
+  },
+  {
+    "title": "Call to action",
+    "slug": "call-to-action",
+    "count": 17
+  },
+  {
+    "title": "Contact us",
+    "slug": "contact-us",
+    "count": 15
+  },
+  {
+    "title": "Footer",
+    "slug": "footer",
+    "count": 18
+  },
+  {
+    "title": "Grid",
+    "slug": "grid",
+    "count": 25
+  },
+  {
+    "title": "Header",
+    "slug": "header",
+    "count": 14
+  },
+  {
+    "title": "Hero",
+    "slug": "hero",
+    "count": 48
+  },
+  {
+    "title": "Inquiry form",
+    "slug": "inquiry-form",
+    "count": 10
+  },
+  {
+    "title": "Partners",
+    "slug": "partners",
+    "count": 0
+  },
+  {
+    "title": "Properties",
+    "slug": "properties",
+    "count": 20
+  },
+  {
+    "title": "Services",
+    "slug": "services",
+    "count": 17
+  },
+  {
+    "title": "Single Agency",
+    "slug": "single-agency",
+    "count": 6
+  },
+  {
+    "title": "Single Agent",
+    "slug": "single-agent",
+    "count": 9
+  },
+  {
+    "title": "Single Property",
+    "slug": "single-property",
+    "count": 18
+  },
+  {
+    "title": "Team",
+    "slug": "team",
+    "count": 7
+  },
+  {
+    "title": "Testimonials",
+    "slug": "testimonials",
+    "count": 8
+  }
+]
