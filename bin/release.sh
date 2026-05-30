@@ -108,17 +108,19 @@ mkdir -p "$DIST_DIR"
 # truncate the POST body, fail the nonce check, and surface as the
 # generic "The link you followed has expired" error.
 #
-# Templates ship as a SEPARATE tarball that the admin fetches on demand
-# via "EstateSite Elementor → Templates → Fetch templates" once the
-# plugin itself is active. Tarball is built and uploaded by this script
-# below.
+# Post-pivot: customers fetch templates on demand from the REST endpoints
+# served by this dev server (dev.estatesite.eu). The dev working copy of
+# templates/ stays intact in this repo (it's the source of truth that the
+# REST endpoints read from) — only the BUILT customer zip drops it.
 rsync -a \
   --exclude='.git' \
+  --exclude='.git/***' \
   --exclude='.github' \
   --exclude='.gitignore' \
   --exclude='.gitattributes' \
   --exclude='.editorconfig' \
   --exclude='bin' \
+  --exclude='bin/***' \
   --exclude='node_modules' \
   --exclude='tests' \
   --exclude='phpunit.xml*' \
@@ -129,6 +131,7 @@ rsync -a \
   --exclude='Thumbs.db' \
   --exclude='RELEASE_NOTES_v*.md' \
   --exclude='templates' \
+  --exclude='templates/***' \
   ./ "$DIST_DIR/"
 
 # Build zip inside the temp dir so the top-level entry is $PACKAGE_SLUG/
@@ -138,26 +141,22 @@ ZIP_SIZE=$(du -h "$WORK_DIR/$ZIP_NAME" | cut -f1)
 echo "✓ Built zip: $ZIP_NAME ($ZIP_SIZE)"
 
 # -----------------------------------------------------------------------------
-# Build templates tarball (separate from the plugin zip)
+# Templates tarball — DISABLED (post-pivot)
 # -----------------------------------------------------------------------------
-# Versionless filename — same templates apply across plugin versions until
-# we add or change templates. When that happens, bump the FETCH_VERSION
-# constant referenced by class-template-fetcher.php and ship a new tarball.
-TEMPLATES_TARBALL="$PACKAGE_SLUG-templates.tar.gz"
-TEMPLATES_SHA256_FILE="$PACKAGE_SLUG-templates.sha256"
-
-if [ -d "templates" ]; then
-  echo "==> Building templates tarball"
-  # `-C .` so the tar entries start with templates/, matching what extract expects
-  tar czf "$WORK_DIR/$TEMPLATES_TARBALL" templates
-  TARBALL_SIZE=$(du -h "$WORK_DIR/$TEMPLATES_TARBALL" | cut -f1)
-  sha256sum "$WORK_DIR/$TEMPLATES_TARBALL" | awk '{print $1}' > "$WORK_DIR/$TEMPLATES_SHA256_FILE"
-  TARBALL_SHA=$(cat "$WORK_DIR/$TEMPLATES_SHA256_FILE")
-  echo "✓ Built templates tarball: $TEMPLATES_TARBALL ($TARBALL_SIZE, sha256=${TARBALL_SHA:0:12}…)"
-else
-  echo "⚠ No templates/ dir found — skipping tarball build"
-  TEMPLATES_TARBALL=""
-fi
+# Previously this script built a separate $PACKAGE_SLUG-templates.tar.gz
+# alongside the plugin zip, so the plugin's "Fetch templates" admin button
+# could download and extract it client-side.
+#
+# After the pivot, customers fetch template content lazily from the REST
+# endpoints served by this dev server (dev.estatesite.eu) — there is no
+# longer a need to ship a local bundle. The tarball build + deploy logic
+# is intentionally neutered. The dev working copy of templates/ stays in
+# this repo as the source of truth for those REST endpoints.
+#
+# To re-enable, restore the tar/sha256 block and uncomment the deploy
+# block further down. Leaving TEMPLATES_TARBALL empty disables the
+# downstream deploy step.
+TEMPLATES_TARBALL=""
 
 # -----------------------------------------------------------------------------
 # Build manifest JSON

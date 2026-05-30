@@ -2,13 +2,12 @@
 /**
  * Admin page — "EstateSite Elementor → Templates".
  *
- * Hosts the "Fetch templates" button that triggers Template_Fetcher to
- * download the ~140 MB template tarball from our update server and extract
- * it into wp-content/uploads/estatesite-wpelementor/templates/.
- *
- * Templates aren't bundled in the plugin zip — see Template_Fetcher for the
- * reasoning. This page is the customer-facing way to install them after
- * the lightweight plugin zip is activated.
+ * Thin-client model: the Elementor template library is no longer bundled
+ * inside the plugin zip or downloaded as a tarball. Instead, the library
+ * is served live from dev.estatesite.eu and accessed at runtime via the
+ * Templates class. This page is purely informational — it shows the
+ * configured library URL, current local status, and a "Test connection"
+ * button that pings the remote manifest to verify reachability.
  *
  * @package EstateSite\Elementor\Admin
  */
@@ -16,18 +15,17 @@
 namespace EstateSite\Elementor\Admin;
 
 use EstateSite\Elementor\Templates;
-use EstateSite\Elementor\Template_Fetcher;
 
 defined( 'ABSPATH' ) || exit;
 
 final class Templates_Page {
 
 	private const PAGE_SLUG    = 'estatesite-wpelementor-templates';
-	private const NONCE_ACTION = 'estatesite_wpelementor_fetch_templates';
+	private const NONCE_ACTION = 'estatesite_wpelementor_test_library';
 
 	public function __construct() {
-		add_action( 'admin_menu',                                              [ $this, 'register_menu' ], 25 );
-		add_action( 'wp_ajax_estatesite_wpelementor_fetch_templates', [ $this, 'ajax_fetch' ] );
+		add_action( 'admin_menu',                                            [ $this, 'register_menu' ], 25 );
+		add_action( 'wp_ajax_estatesite_wpelementor_test_library', [ $this, 'ajax_test_library' ] );
 	}
 
 	public function register_menu(): void {
@@ -51,9 +49,9 @@ final class Templates_Page {
 			wp_die( esc_html__( 'You do not have permission to view this page.', 'estatesite-wpelementor' ) );
 		}
 
-		$present    = Templates::library_present();
-		$stats      = $present ? Templates::stats() : [];
-		$last_fetch = Template_Fetcher::last_fetch();
+		$present     = Templates::library_present();
+		$stats       = $present ? Templates::stats() : [];
+		$library_url = Templates::library_url();
 
 		?>
 		<div class="wrap">
@@ -63,8 +61,8 @@ final class Templates_Page {
 				<h2><?php esc_html_e( 'Library Status', 'estatesite-wpelementor' ); ?></h2>
 				<table class="widefat striped" style="max-width:600px;">
 					<tr>
-						<th><?php esc_html_e( 'Templates installed', 'estatesite-wpelementor' ); ?></th>
-						<td><?php echo $present ? '✓ ' . esc_html__( 'Yes', 'estatesite-wpelementor' ) : '— ' . esc_html__( 'Not yet — click Fetch below', 'estatesite-wpelementor' ); ?></td>
+						<th><?php esc_html_e( 'Local templates present', 'estatesite-wpelementor' ); ?></th>
+						<td><?php echo $present ? '&#10003; ' . esc_html__( 'Yes', 'estatesite-wpelementor' ) : '&mdash; ' . esc_html__( 'No (thin-client mode — served remotely)', 'estatesite-wpelementor' ); ?></td>
 					</tr>
 					<?php if ( $present ) : ?>
 					<tr>
@@ -80,50 +78,42 @@ final class Templates_Page {
 						<td><?php echo (int) ( $stats['image_files'] ?? 0 ); ?></td>
 					</tr>
 					<?php endif; ?>
-					<?php if ( $last_fetch ) : ?>
-					<tr>
-						<th><?php esc_html_e( 'Last fetched', 'estatesite-wpelementor' ); ?></th>
-						<td>
-							v<?php echo esc_html( $last_fetch['version'] ); ?>
-							— <?php echo esc_html( gmdate( 'Y-m-d H:i', $last_fetch['at'] ) ); ?> UTC
-							(<?php echo esc_html( size_format( $last_fetch['size_bytes'] ?? 0 ) ); ?>)
-						</td>
-					</tr>
-					<?php endif; ?>
 				</table>
 			</div>
 
 			<div class="card" style="max-width:none;">
-				<h2><?php esc_html_e( 'Fetch / Update Templates', 'estatesite-wpelementor' ); ?></h2>
+				<h2><?php esc_html_e( 'Remote Library', 'estatesite-wpelementor' ); ?></h2>
 				<p>
-					<?php esc_html_e( 'Downloads the Houzez template library (~140 MB) from the EstateSite update server and installs it into wp-content/uploads/. Safe to re-run — replaces the current library atomically.', 'estatesite-wpelementor' ); ?>
+					<?php esc_html_e( 'The Elementor template library is served live from the EstateSite update server. No local download or extraction is required.', 'estatesite-wpelementor' ); ?>
 				</p>
 				<p>
-					<button type="button" class="button button-primary" id="esele-fetch-templates">
-						<?php echo $present
-							? esc_html__( 'Re-fetch templates', 'estatesite-wpelementor' )
-							: esc_html__( 'Fetch templates', 'estatesite-wpelementor' ); ?>
+					<strong><?php esc_html_e( 'Library URL:', 'estatesite-wpelementor' ); ?></strong>
+					<code><?php echo esc_html( $library_url ); ?></code>
+				</p>
+				<p>
+					<button type="button" class="button button-primary" id="esele-test-library">
+						<?php esc_html_e( 'Test connection', 'estatesite-wpelementor' ); ?>
 					</button>
-					<span class="esele-fetch-status" style="margin-left:1em;"></span>
+					<span class="esele-test-status" style="margin-left:1em;"></span>
 				</p>
 				<p class="description">
-					<?php esc_html_e( 'Tip: the fetch may take 30–120 seconds on slow connections. Keep this tab open until you see "✓ Done".', 'estatesite-wpelementor' ); ?>
+					<?php esc_html_e( 'Pings the manifest endpoint and reports the HTTP status and how many template entries it advertises.', 'estatesite-wpelementor' ); ?>
 				</p>
 			</div>
 		</div>
 
 		<script>
 		(function () {
-			var $btn    = document.getElementById('esele-fetch-templates');
-			var $status = document.querySelector('.esele-fetch-status');
+			var $btn    = document.getElementById('esele-test-library');
+			var $status = document.querySelector('.esele-test-status');
 			if (!$btn) return;
 
 			$btn.addEventListener('click', function () {
 				$btn.disabled = true;
-				$status.textContent = '<?php echo esc_js( __( 'Downloading… (this can take a minute)', 'estatesite-wpelementor' ) ); ?>';
+				$status.textContent = '<?php echo esc_js( __( 'Testing…', 'estatesite-wpelementor' ) ); ?>';
 
 				var body = new URLSearchParams();
-				body.append('action', 'estatesite_wpelementor_fetch_templates');
+				body.append('action', 'estatesite_wpelementor_test_library');
 				body.append('_wpnonce', '<?php echo esc_js( wp_create_nonce( self::NONCE_ACTION ) ); ?>');
 
 				fetch(ajaxurl, {
@@ -135,17 +125,16 @@ final class Templates_Page {
 				.then(function (j) {
 					$btn.disabled = false;
 					if (!j.success) {
-						$status.innerHTML = '<span style="color:#b04632;">✗ ' +
+						$status.innerHTML = '<span style="color:#b04632;">&#10007; ' +
 							(j.data && j.data.message ? j.data.message : 'Error') + '</span>';
 						return;
 					}
-					$status.innerHTML = '<span style="color:#2c7a3a;">✓ ' +
-						(j.data.message || 'Done') + ' Reloading…</span>';
-					setTimeout(function () { window.location.reload(); }, 1500);
+					$status.innerHTML = '<span style="color:#2c7a3a;">&#10003; HTTP ' +
+						j.data.http_code + ' — ' + j.data.count + ' template(s) advertised.</span>';
 				})
 				.catch(function (e) {
 					$btn.disabled = false;
-					$status.innerHTML = '<span style="color:#b04632;">✗ ' + e.message + '</span>';
+					$status.innerHTML = '<span style="color:#b04632;">&#10007; ' + e.message + '</span>';
 				});
 			});
 		})();
@@ -153,20 +142,63 @@ final class Templates_Page {
 		<?php
 	}
 
-	public function ajax_fetch(): void {
+	/**
+	 * AJAX: ping the remote manifest URL and report reachability.
+	 *
+	 * Returns success on HTTP 200 with a parseable JSON list, error otherwise.
+	 */
+	public function ajax_test_library(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( [ 'message' => __( 'No permission.', 'estatesite-wpelementor' ) ] );
 		}
 		check_ajax_referer( self::NONCE_ACTION );
 
-		// The fetch involves a 140 MB download + extract — give PHP room.
-		@set_time_limit( 600 );
-		@ini_set( 'memory_limit', '512M' );
+		$url  = Templates::manifest_url();
+		$resp = wp_safe_remote_get( $url, [ 'timeout' => 15 ] );
 
-		$r = Template_Fetcher::fetch();
-		if ( $r['ok'] ) {
-			wp_send_json_success( $r );
+		if ( is_wp_error( $resp ) ) {
+			wp_send_json_error( [
+				'message' => sprintf(
+					/* translators: %s: error message from WP_Error. */
+					__( 'Cannot reach library: %s', 'estatesite-wpelementor' ),
+					$resp->get_error_message()
+				),
+			] );
 		}
-		wp_send_json_error( $r );
+
+		$code = (int) wp_remote_retrieve_response_code( $resp );
+		$body = wp_remote_retrieve_body( $resp );
+		$data = json_decode( $body, true );
+
+		// The manifest can be either a plain list or an object with a list under
+		// a conventional key — count whichever shape we get.
+		$count = 0;
+		if ( is_array( $data ) ) {
+			if ( isset( $data['templates'] ) && is_array( $data['templates'] ) ) {
+				$count = count( $data['templates'] );
+			} elseif ( isset( $data['items'] ) && is_array( $data['items'] ) ) {
+				$count = count( $data['items'] );
+			} else {
+				$count = count( $data );
+			}
+		}
+
+		if ( $code !== 200 ) {
+			wp_send_json_error( [
+				'message'   => sprintf(
+					/* translators: %d: HTTP status code. */
+					__( 'Library returned HTTP %d.', 'estatesite-wpelementor' ),
+					$code
+				),
+				'http_code' => $code,
+				'count'     => $count,
+			] );
+		}
+
+		wp_send_json_success( [
+			'http_code' => $code,
+			'count'     => $count,
+			'url'       => $url,
+		] );
 	}
 }

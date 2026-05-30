@@ -32,6 +32,7 @@ final class Plugin {
 		// serves responses from local files. Registered early so it's ready
 		// before any library code might fire HTTP requests.
 		Templates::register();
+		Templates_Proxy::register();
 
 		// HTF helper functions — small procedural files (2.5K LOC) that
 		// Elementor widgets depend on (e.g. houzez_search_builder_custom_field_elementor).
@@ -86,10 +87,11 @@ final class Plugin {
 		// has no admin entry point at all.
 		add_action( 'admin_menu', [ $this, 'register_theme_builder_submenu' ], 20 );
 
-		// Admin: "EE Templates" page with the Fetch button. Templates aren't
-		// shipped in the plugin zip (~140 MB would exceed PHP's typical
-		// upload_max_filesize) — the customer fetches them post-install from
-		// our update server.
+		// Admin: "EE Templates" info page (thin-client model). The Elementor
+		// template library is no longer bundled in the plugin zip or fetched
+		// as a tarball — it's served live from dev.estatesite.eu and accessed
+		// at runtime via the Templates class. This page just shows status and
+		// offers a "Test connection" button against the remote manifest.
 		if ( is_admin() ) {
 			new \EstateSite\Elementor\Admin\Templates_Page();
 		}

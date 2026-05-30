@@ -38,11 +38,34 @@ final class Templates {
 	private static $asset_id_map = null;
 
 	public static function register(): void {
+		// Dual-mode guard: when the local template catalog isn't bundled (the
+		// customer-distributed plugin zip ships without templates/ to stay
+		// under typical PHP upload limits), this class becomes a thin resolver.
+		// Registering no hooks means we never intercept HTTP, never emit CORS
+		// headers for routes we couldn't serve, and never try to populate the
+		// uploads dir from a non-existent source-assets/. Callers fall back to
+		// library_url() / single_url() / proxy_endpoint_url() to reach the
+		// canonical EstateSite-hosted catalog instead.
+		if ( self::is_remote_mode() ) {
+			return;
+		}
+
 		add_filter( 'pre_http_request', [ self::class, 'intercept_remote' ], 10, 3 );
 
 		// Custom REST routes (optional — JS uses pre_http_request path instead,
 		// but having native REST endpoints is useful for our own tooling).
 		add_action( 'rest_api_init', [ self::class, 'register_rest_routes' ] );
+
+		// CORS + cache headers for cross-origin template fetches from customer
+		// sites. WordPress only reflects Origin for authenticated requests by
+		// default; our /estatesite/v1/templates endpoints are public so we must
+		// emit the headers ourselves.
+		// Priority 1 so we run BEFORE WP core's rest_send_cors_headers (default
+		// priority 10, hooked in wp-includes/rest-api.php:252). Inside the
+		// handler, when the request matches our route prefix, we remove_filter()
+		// core's CORS callback so it doesn't overwrite our headers (which would
+		// otherwise reflect Origin and emit Allow-Credentials:true).
+		add_filter( 'rest_pre_serve_request', [ self::class, 'send_cors_headers' ], 1, 4 );
 
 		// Lazy-populate uploads dir on every page load if missing. Cheap check
 		// (single file_exists). Most loads no-op. Catches cases where activation
@@ -411,7 +434,7 @@ final class Templates {
 	public static function preview_base_url(): string {
 		return (string) apply_filters(
 			'estatesite_template_preview_url',
-			'https://estatesite.eu/templates'
+			home_url( '/templates' )
 		);
 	}
 
@@ -525,6 +548,63 @@ final class Templates {
 	// Public REST API (optional convenience for our own tooling/dashboard).
 	// ---------------------------------------------------------------------
 
+	/**
+	 * Emit CORS + cache headers for the public /estatesite/v1/templates routes.
+	 *
+	 * Hooked on `rest_pre_serve_request`. Customer WP installs fetch the
+	 * template catalog (manifest + per-template JSON + preview images) cross-
+	 * origin from this dev/origin server, so the browser requires explicit
+	 * CORS headers on the response. WordPress' built-in REST CORS handling
+	 * only reflects the Origin header for authenticated requests; these
+	 * routes use `__return_true` for permission, so we must emit the headers
+	 * ourselves.
+	 *
+	 * Short 5-minute Cache-Control lets customer sites and intermediate CDNs
+	 * cache successful responses without making the catalog feel stale.
+	 *
+	 * @param bool             $served  Whether the request has already been served.
+	 * @param \WP_HTTP_Response $result  Result to send to the client.
+	 * @param \WP_REST_Request  $request Request used to generate the response.
+	 * @param \WP_REST_Server   $server  Server instance.
+	 * @return bool Unchanged $served flag.
+	 */
+	public static function send_cors_headers( $served, $result, $request, $server ) {
+		$route = is_object( $request ) && method_exists( $request, 'get_route' )
+			? (string) $request->get_route()
+			: '';
+
+		if ( strpos( $route, '/estatesite/v1/templates' ) !== 0 ) {
+			return $served;
+		}
+
+		// We matched our route. Strip WP core's rest_send_cors_headers callback
+		// (default priority 10) so it cannot overwrite our
+		// Access-Control-Allow-Origin: * with a reflected Origin or emit
+		// Access-Control-Allow-Credentials: true. Removed only for our routes;
+		// all other REST endpoints still get the default WP CORS behavior
+		// because remove_filter() only affects this single request's filter chain.
+		remove_filter( 'rest_pre_serve_request', 'rest_send_cors_headers', 10 );
+
+		header( 'Access-Control-Allow-Origin: *' );
+		header( 'Access-Control-Allow-Methods: GET, OPTIONS' );
+		header( 'Access-Control-Allow-Headers: Content-Type, X-WP-Nonce' );
+		header( 'Access-Control-Allow-Credentials: false' );
+		header( 'Access-Control-Max-Age: 86400' );
+		header( 'Vary: Origin' );
+		header( 'Cache-Control: public, max-age=300' );
+
+		$method = is_object( $request ) && method_exists( $request, 'get_method' )
+			? strtoupper( (string) $request->get_method() )
+			: '';
+
+		if ( $method === 'OPTIONS' ) {
+			status_header( 204 );
+			exit;
+		}
+
+		return $served;
+	}
+
 	public static function register_rest_routes(): void {
 		// Manifest endpoint — matches what blocks-templates.js expects from
 		// the all-templates.json file on studio.houzez.co.
@@ -631,11 +711,13 @@ final class Templates {
 	// ---------------------------------------------------------------------
 
 	/**
-	 * Templates live in ONE of two locations, checked in priority order:
+	 * Templates live in ONE of two locations, checked in priority order
+	 * (dual-mode resolution):
 	 *
-	 *   1. wp-content/uploads/estatesite-wpelementor/templates/  ← customer post-fetch
-	 *      Created when admin clicks "Fetch templates" (see Template_Fetcher).
-	 *      Survives plugin updates.
+	 *   1. wp-content/uploads/estatesite-wpelementor/templates/  ← customer-side
+	 *      Populated out-of-band (e.g. on demand from the remote template
+	 *      source) and survives plugin updates because it lives under
+	 *      uploads/. Preferred when present and contains a manifest.json.
 	 *
 	 *   2. wp-content/plugins/estatesite-wpelementor/templates/  ← bundled (legacy / dev)
 	 *      Only exists on the dev tree and pre-1.0.2 zips. Production zips
@@ -673,8 +755,9 @@ final class Templates {
 	}
 
 	/**
-	 * Reset the cached base paths. Called by Template_Fetcher after a fetch
-	 * lands new templates in uploads/, so the next read picks the new location.
+	 * Reset the cached base paths. Call this after templates land in (or are
+	 * removed from) uploads/ so the next read re-resolves between the
+	 * uploads/ customer-side location and the bundled fallback.
 	 */
 	public static function reset_base_cache(): void {
 		self::$base_dir_cache = null;
@@ -710,5 +793,77 @@ final class Templates {
 			'content_files'    => is_array( $content_files ) ? count( $content_files ) : 0,
 			'image_files'      => is_array( $image_files ) ? count( $image_files ) : 0,
 		];
+	}
+
+	// ---------------------------------------------------------------------
+	// Dual-mode resolver API.
+	//
+	// When the customer plugin zip ships without the bundled templates/
+	// catalog (is_remote_mode() === true), these helpers return URLs that
+	// point at the canonical EstateSite-hosted catalog. The same helpers
+	// also work on dev (where the catalog is local) — they just resolve
+	// to whatever ESELE_TEMPLATES_LIBRARY_URL / the filter declares.
+	//
+	// Precedence for the base URL:
+	//   1. defined( 'ESELE_TEMPLATES_LIBRARY_URL' ) constant (wp-config override)
+	//   2. apply_filters( 'esele_templates_library_url', ... ) (runtime override)
+	//   3. hardcoded default https://dev.estatesite.eu/wp-json/estatesite/v1/templates
+	// ---------------------------------------------------------------------
+
+	/**
+	 * Base URL of the canonical template library (no trailing slash).
+	 */
+	public static function library_url(): string {
+		$default = 'https://dev.estatesite.eu/wp-json/estatesite/v1/templates';
+		if ( defined( 'ESELE_TEMPLATES_LIBRARY_URL' ) ) {
+			$url = (string) constant( 'ESELE_TEMPLATES_LIBRARY_URL' );
+		} else {
+			$url = (string) apply_filters( 'esele_templates_library_url', $default );
+		}
+		return untrailingslashit( $url );
+	}
+
+	/**
+	 * Alias of library_url(). The manifest list lives at the library root.
+	 */
+	public static function manifest_url(): string {
+		return self::library_url();
+	}
+
+	/**
+	 * Single-template URL for a concrete slug. Callers that need a literal
+	 * '{slug}' placeholder (e.g. for client-side templating) should bypass
+	 * this helper and concatenate library_url() . '/by-slug/{slug}' directly.
+	 */
+	public static function single_url( string $slug ): string {
+		return self::library_url() . '/by-slug/' . rawurlencode( $slug );
+	}
+
+	/**
+	 * Local REST endpoint used by the Elementor library JS to insert a
+	 * template once selected. Always served from the running site (not the
+	 * canonical library), because the insertion is a write op on the local
+	 * post tree.
+	 */
+	public static function proxy_endpoint_url(): string {
+		return rest_url( 'estatesite-wpelementor/v1/insert-template' );
+	}
+
+	/**
+	 * True when this install has no local template catalog and must defer
+	 * to the canonical EstateSite-hosted library. Cheap file_exists check
+	 * against the bundled-location manifest.
+	 *
+	 * Guard against the rare case where ESELE_DIR is undefined (e.g. this
+	 * file gets required before the main plugin bootstrap defined the
+	 * constants): treat as remote-mode so we don't fatal on undefined-
+	 * constant access.
+	 */
+	public static function is_remote_mode(): bool {
+		if ( ! defined( 'ESELE_DIR' ) ) {
+			return true;
+		}
+		$bundled = rtrim( ESELE_DIR, '/' ) . '/templates/manifest.json';
+		return ! file_exists( $bundled );
 	}
 }

@@ -4,7 +4,7 @@ Tags: real estate, elementor, widgets
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -21,6 +21,17 @@ Adds EstateSite-specific widgets, dynamic tags, and templates to Elementor. Requ
 * Editor-side "pick a preview post" hint when no target is configured (replaces empty/broken render with actionable message)
 
 == Changelog ==
+
+= 1.0.3 =
+* Pivot: Templates are now served live from the EstateSite library at https://dev.estatesite.eu/wp-json/estatesite/v1/templates instead of being downloaded and extracted locally. The previous 140 MB tarball workflow is gone — your site fetches each template only when you actually insert it, and images are sideloaded into your Media Library on demand. Result: customer plugin zip ships without the bundled templates/ directory, no admin button-press required to "install" the library, no PharData extraction, no atomic-swap staging dir, no 170 MB of disk in wp-content/uploads/.
+* New: REST proxy POST /wp-json/estatesite-wpelementor/v1/insert-template handles the insert flow customer-side. It calls out to the EstateSite library, runs the returned Elementor JSON through Elementor's own Import_Images pipeline (sha1 dedupe via _elementor_source_image_hash postmeta — re-inserting the same template won't re-upload its images), and returns the localized template ready to drop into the editor.
+* New: ESELE_TEMPLATES_LIBRARY_URL wp-config.php constant. Define it to point your site at a different library origin (staging, mirror, internal CDN) without touching plugin code. Defaults to https://dev.estatesite.eu/wp-json/estatesite/v1/templates.
+* New: Templates::library_url() / manifest_url() / single_url() / proxy_endpoint_url() / is_remote_mode() resolver API. Themes and add-ons can read the configured library origin and the customer-side proxy endpoint without hardcoding URLs.
+* Tweak: Admin "EstateSite → EE Templates" page replaced. The old "Fetch templates" button is gone (no tarball to fetch); the page is now a "Test connection" card that pings the configured library origin and shows manifest entry count + HTTP status so you can verify connectivity at a glance.
+* Tweak: Template preview image base URL now defaults to your own site (home_url('/templates')) instead of estatesite.eu/templates. Previews resolve against whichever origin actually serves the template assets.
+* Deprecated: includes/class-template-fetcher.php is now a no-op shim. Method signatures preserved for back-compat; fetch() returns a "deprecated — templates are served remotely" message and last_fetch() returns null. If you had wired custom code to the fetcher it will keep loading but stop doing work — switch to the REST proxy.
+* Internal: Templates class runs in dual mode. On the dev origin (bundled templates present) it serves the full library over REST; on customer installs (no bundled templates) it acts as a thin resolver that delegates to the REST proxy. Same class, same public API, behavior keyed off filesystem state.
+* Internal: CORS headers added to the library REST routes (Access-Control-Allow-Origin: *, Access-Control-Allow-Credentials: false). Scoped to /estatesite/v1/templates* only via WP's rest_pre_serve_request filter — WP core's default cors filter is removed for these routes via priority 1 + remove_filter so the headers we send are the ones the browser sees.
 
 = 1.0.2 =
 * Architecture: Stop bundling the 170 MB Houzez template library in the plugin zip. Customer uploading the previous v1.0.0 (140 MB zip) hit "The link you followed has expired" because PHP truncated the POST body — most hosts default upload_max_filesize to 2-8 MB. Plugin zip now 972 KB (down from 140 MB), templates served as a separate tarball from the EstateSite update server, fetched on demand via the new "EstateSite → EE Templates" admin page with a single button click.

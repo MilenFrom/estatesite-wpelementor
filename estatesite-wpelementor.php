@@ -3,7 +3,7 @@
  * Plugin Name: EstateSite Elementor
  * Plugin URI:  https://estatesite.eu
  * Description: Elementor widgets, dynamic tags, theme builder integration, and templates library for EstateSite.
- * Version:     1.0.2
+ * Version:     1.0.3
  * Author:      Estate Site
  * Author URI:  https://estatesite.eu
  * Text Domain: estatesite-wpelementor
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'ESELE_VERSION',  '1.0.2' );
+define( 'ESELE_VERSION',  '1.0.3' );
 define( 'ESELE_FILE',     __FILE__ );
 define( 'ESELE_DIR',      plugin_dir_path( __FILE__ ) );
 define( 'ESELE_URL',      plugin_dir_url( __FILE__ ) );
@@ -123,6 +123,15 @@ add_action( 'plugins_loaded', static function () {
 			: 'https://dev.estatesite.eu/updates/estatesite-wpelementor.json'
 	);
 }, 6 );
+
+/**
+ * Source of truth for the Elementor template library.
+ *
+ * Defaults to dev.estatesite.eu. Customer installs override in wp-config.php:
+ *   define( 'ESELE_TEMPLATES_LIBRARY_URL', 'https://staging.example/wp-json/estatesite/v1/templates' );
+ *
+ * The /by-slug/{slug} sub-route is derived automatically.
+ */
 
 // Bootstrap at default priority — Core (priority 5) is already loaded.
 add_action( 'plugins_loaded', function () {
