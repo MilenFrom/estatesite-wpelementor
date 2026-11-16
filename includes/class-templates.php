@@ -630,14 +630,61 @@ final class Templates {
 		] );
 	}
 
+	/**
+	 * GET /estatesite/v1/templates.
+	 *
+	 * Client sites forward Houzez Studio's query string here unchanged
+	 * (forward_to_remote_library()), so answer every shape it sends:
+	 *   ?id=N             one template with its content (same as /templates/N)
+	 *   ?bulk=...         not offered (400): the client then fetches each template with ?id=
+	 *   ?page=&per_page=  one page of the list, plus a `pagination` block
+	 *   anything else     the whole list (Houzez Studio sends ?all=true)
+	 * Before this, every query got the whole list, so inserting a template
+	 * on a client site received the list instead of the template.
+	 */
 	public static function rest_list( $request ) {
+		$id = $request->get_param( 'id' );
+		if ( null !== $id && '' !== $id ) {
+			if ( ! is_scalar( $id ) || ! ctype_digit( (string) $id ) ) {
+				return new \WP_Error( 'invalid_id', 'Template id must be a number.', [ 'status' => 400 ] );
+			}
+			return self::rest_single_response( (int) $id );
+		}
+
+		if ( null !== $request->get_param( 'bulk' ) ) {
+			return new \WP_Error( 'bulk_not_supported', 'Bulk download is not offered; request templates one by one with ?id=.', [ 'status' => 400 ] );
+		}
+
 		$body = self::manifest_response_body();
 		if ( $body === null ) {
 			return new \WP_Error( 'no_catalog', 'Template catalog not available.', [ 'status' => 500 ] );
 		}
 		// Body is already a JSON string with image+link rewritten.
-		$decoded = json_decode( $body, true );
-		return rest_ensure_response( $decoded );
+		$data = json_decode( $body, true );
+
+		$page     = $request->get_param( 'page' );
+		$per_page = $request->get_param( 'per_page' );
+		if ( ( null !== $page || null !== $per_page ) && is_array( $data ) ) {
+			$elements = isset( $data['elements'] ) && is_array( $data['elements'] ) ? array_values( $data['elements'] ) : [];
+			$total    = count( $elements );
+			$per_page = is_scalar( $per_page ) ? (int) $per_page : 0;
+			$per_page = max( 1, min( 500, $per_page ?: 50 ) );
+			$pages    = max( 1, (int) ceil( $total / $per_page ) );
+			$page     = is_scalar( $page ) ? (int) $page : 0;
+			$page     = max( 1, $page ?: 1 );
+
+			$data['elements']      = array_slice( $elements, ( $page - 1 ) * $per_page, $per_page );
+			$data['total_records'] = $total;
+			$data['pagination']    = [
+				'current_page' => $page,
+				'per_page'     => $per_page,
+				'total_pages'  => $pages,
+				'has_next'     => $page < $pages,
+				'has_prev'     => $page > 1,
+			];
+		}
+
+		return rest_ensure_response( $data );
 	}
 
 	public static function rest_single_by_id( $request ) {
