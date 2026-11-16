@@ -139,7 +139,7 @@ add_action( 'plugins_loaded', function () {
 	if ( ! defined( 'ESCORE_VERSION' ) ) {
 		add_action( 'admin_notices', function () {
 			echo '<div class="notice notice-error"><p>'
-				. esc_html__( 'EstateSite Elementor requires EstateSite Core plugin to be active.', 'estatesite-wpelementor' )
+				. esc_html__( 'EstateSite Elementor requires EstateSite HouzezCore plugin to be active.', 'estatesite-wpelementor' )
 				. '</p></div>';
 		} );
 		return;

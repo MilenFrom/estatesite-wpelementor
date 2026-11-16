@@ -12,7 +12,7 @@ Elementor widgets, dynamic tags, theme builder integration, and templates librar
 
 == Description ==
 
-Adds EstateSite-specific widgets, dynamic tags, and templates to Elementor. Requires the EstateSite Core plugin and Elementor (free is sufficient; theme-builder features require Pro or our Elementor Enhancer fork).
+Adds EstateSite-specific widgets, dynamic tags, and templates to Elementor. Requires the EstateSite HouzezCore plugin and Elementor (free is sufficient; theme-builder features require Pro or our Elementor Enhancer fork).
 
 * 100+ Houzez Elementor widgets ported (single-property variants, property cards v1-v8, search forms, agent cards, agency listings, partners, testimonials, blog posts)
 * Theme Builder fork from houzez-studio plugin v1.3.3 — fts_builder CPT, display conditions, header/footer/single template editor
