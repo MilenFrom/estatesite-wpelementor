@@ -18,13 +18,13 @@ This plugin provides:
 
 ## Dependencies
 
-- **[EstateSite Core](https://github.com/MilenFrom/estatesite-wpcore)** (hard dependency) — install Core first
+- **[EstateSite HouzezCore](https://github.com/MilenFrom/estatesite-wpcore)** (hard dependency) — install it first
 - **Elementor** (free) — required
 - **Elementor Pro** — optional, only needed for advanced theme-builder features
 
 ## Install
 
-1. Make sure EstateSite Core is installed and active.
+1. Make sure EstateSite HouzezCore is installed and active.
 2. Download the latest `.zip` from the [Releases](https://github.com/MilenFrom/estatesite-wpelementor/releases) page.
 3. WordPress Admin → Plugins → Add New → Upload Plugin → choose the zip.
 4. Activate.
@@ -35,7 +35,7 @@ Future updates appear automatically in Dashboard → Updates.
 
 - WordPress 6.4+
 - PHP 7.4+
-- EstateSite Core (this package's hard dep)
+- EstateSite HouzezCore (this package's hard dep)
 - Elementor 3.x or 4.x
 
 ## License

@@ -4,7 +4,7 @@ Tags: real estate, elementor, widgets
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.3
+Stable tag: 1.0.4
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -21,6 +21,10 @@ Adds EstateSite-specific widgets, dynamic tags, and templates to Elementor. Requ
 * Editor-side "pick a preview post" hint when no target is configured (replaces empty/broken render with actionable message)
 
 == Changelog ==
+
+= 1.0.4 =
+* Change: The notice shown when the required core plugin is missing now names it **EstateSite HouzezCore** (formerly EstateSite Core), the name that plugin uses from version 1.0.9. The plugin is detected the same way as before, so nothing needs reinstalling or reconfiguring.
+* Internal: The package no longer includes the developers' internal notes file.
 
 = 1.0.3 =
 * Pivot: Templates are now served live from the EstateSite library at https://dev.estatesite.eu/wp-json/estatesite/v1/templates instead of being downloaded and extracted locally. The previous 140 MB tarball workflow is gone — your site fetches each template only when you actually insert it, and images are sideloaded into your Media Library on demand. Result: customer plugin zip ships without the bundled templates/ directory, no admin button-press required to "install" the library, no PharData extraction, no atomic-swap staging dir, no 170 MB of disk in wp-content/uploads/.
