@@ -4,7 +4,7 @@ Tags: real estate, elementor, widgets
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.4
+Stable tag: 1.0.5
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -21,6 +21,9 @@ Adds EstateSite-specific widgets, dynamic tags, and templates to Elementor. Requ
 * Editor-side "pick a preview post" hint when no target is configured (replaces empty/broken render with actionable message)
 
 == Changelog ==
+
+= 1.0.5 =
+* Fix: The template library answered every request with its full list. On a site that serves the library from its own copy of the templates, a request for one template (to insert it) returned the whole list instead, and paged requests were not paged. It now returns the requested template or page. Sites that get their templates from the EstateSite library, the usual setup, were not affected.
 
 = 1.0.4 =
 * Change: The notice shown when the required core plugin is missing now names it **EstateSite HouzezCore** (formerly EstateSite Core), the name that plugin uses from version 1.0.9. The plugin is detected the same way as before, so nothing needs reinstalling or reconfiguring.

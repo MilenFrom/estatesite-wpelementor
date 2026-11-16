@@ -3,7 +3,7 @@
  * Plugin Name: EstateSite Elementor
  * Plugin URI:  https://estatesite.eu
  * Description: Elementor widgets, dynamic tags, theme builder integration, and templates library for EstateSite.
- * Version:     1.0.4
+ * Version:     1.0.5
  * Author:      Estate Site
  * Author URI:  https://estatesite.eu
  * Text Domain: estatesite-wpelementor
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'ESELE_VERSION',  '1.0.4' );
+define( 'ESELE_VERSION',  '1.0.5' );
 define( 'ESELE_FILE',     __FILE__ );
 define( 'ESELE_DIR',      plugin_dir_path( __FILE__ ) );
 define( 'ESELE_URL',      plugin_dir_url( __FILE__ ) );
